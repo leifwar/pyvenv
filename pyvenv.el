@@ -73,6 +73,15 @@ virtualenv. If a virtualenv is already enabled, it will ask first."
   :safe #'stringp
   :group 'pyvenv)
 
+(defcustom pyvenv-poetry nil
+  "Location of poetry.
+
+When `pyvenv-mode' is enabled, pyvenv will switch to this
+virtualenv. If a virtualenv is already enabled, it will ask first."
+  :type 'directory
+  :safe #'stringp
+  :group 'pyvenv)
+
 (defcustom pyvenv-tracking-ask-before-change nil
   "Non-nil means pyvenv will ask before automatically changing a virtualenv.
 
@@ -380,6 +389,17 @@ buffer-local `pyvenv-workon' or `pyvenv-activate' variable."
       (add-hook 'post-command-hook 'pyvenv-track-virtualenv)
     (remove-hook 'post-command-hook 'pyvenv-track-virtualenv)))
 
+(defun pyvenv-poetry-active-virtualenv ()
+  "Get current active poetry environment"
+  (with-temp-buffer
+    (if (= 0 (call-process-shell-command (concat  "/usr/bin/python3" " " pyvenv-poetry " env list") nil t))
+        (loop for line in (split-string (buffer-string) "\n") do
+              (if (string-match ".*(Activated)" line)
+                  (return (car (split-string line)))))
+      )
+    )
+  )
+
 (defun pyvenv-track-virtualenv ()
   "Set a virtualenv as specified for the current buffer.
 
@@ -387,19 +407,22 @@ If either `pyvenv-activate' or `pyvenv-workon' are specified, and
 they specify a virtualenv different from the current one, switch
 to that virtualenv."
   (cond
-   (pyvenv-activate
-    (when (and (not (equal (file-name-as-directory pyvenv-activate)
-                           pyvenv-virtual-env))
-               (or (not pyvenv-tracking-ask-before-change)
-                   (y-or-n-p (format "Switch to virtualenv %s (currently %s)"
-                                     pyvenv-activate pyvenv-virtual-env))))
-      (pyvenv-activate pyvenv-activate)))
-   (pyvenv-workon
-    (when (and (not (equal pyvenv-workon pyvenv-virtual-env-name))
-               (or (not pyvenv-tracking-ask-before-change)
-                   (y-or-n-p (format "Switch to virtualenv %s (currently %s)"
-                                     pyvenv-workon pyvenv-virtual-env-name))))
-      (pyvenv-workon pyvenv-workon)))))
+     (pyvenv-activate
+      (when (and (not (equal (file-name-as-directory pyvenv-activate) pyvenv-virtual-env))
+                 (or (not pyvenv-tracking-ask-before-change)
+                     (y-or-n-p (format "Switch to virtualenv %s (currently %s)"
+                                       pyvenv-activate pyvenv-virtual-env))))
+        (pyvenv-activate pyvenv-activate)))
+     (pyvenv-workon
+      (when (and (not (equal pyvenv-workon pyvenv-virtual-env-name))
+                 (or (not pyvenv-tracking-ask-before-change)
+                     (y-or-n-p (format "Switch to virtualenv %s (currently %s)"
+                                       pyvenv-workon pyvenv-virtual-env-name))))
+        (pyvenv-workon pyvenv-workon)))
+     (pyvenv-poetry (let ((poetry-environment (pyvenv-poetry-active-virtualenv)))
+                      (if poetry-environment
+                          (pyvenv-workon poetry-environment))))))
+
 
 (defun pyvenv-run-virtualenvwrapper-hook (hook &optional propagate-env &rest args)
   "Run a virtualenvwrapper hook, and update the environment.
